@@ -1,0 +1,32 @@
+{
+  "name": "outlook-calendar-sync",
+  "version": "1.0.0",
+  "description": "Sync a shared Outlook calendar to .ics for Google Calendar import",
+  "type": "module",
+  "scripts": {
+    "sync": "node sync.js",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.0.0",
+    "esbuild": "^0.21.0"
+  },
+  "pkg": {
+    "scripts": "bundle.cjs",
+    "assets": [
+      "node_modules/playwright-core/lib/server/chromium/appIcon.png",
+      "node_modules/playwright-core/lib/**/*.png",
+      "node_modules/playwright-core/lib/**/*.ico"
+    ],
+    "targets": [
+      "node20-macos-arm64",
+      "node20-macos-x64",
+      "node20-win-x64",
+      "node20-linux-x64"
+    ],
+    "outputPath": "dist"
+  }
+}
