@@ -7,7 +7,10 @@ name: Build binaries
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:  # also triggerable manually from the Actions tab
+  workflow_dispatch: # also triggerable manually from the Actions tab
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -16,9 +19,9 @@ jobs:
         include:
           - os: windows-latest
             artifact: outlook-calendar-sync-win-x64.exe
-          - os: macos-latest       # ARM runner (M1)
+          - os: macos-latest # ARM runner (M1)
             artifact: outlook-calendar-sync-macos-arm64
-          - os: macos-13           # Intel runner
+          - os: macos-13 # Intel runner
             artifact: outlook-calendar-sync-macos-x64
           - os: ubuntu-latest
             artifact: outlook-calendar-sync-linux-x64
