@@ -119,7 +119,8 @@ try {
   const result = execSync("npx playwright --version", { encoding: "utf8" });
   // Default cache locations
   const candidates = [
-    join(process.env.HOME ?? "", ".cache", "ms-playwright"),
+    join(process.env.HOME ?? "", "Library", "Caches", "ms-playwright"), // macOS
+    join(process.env.HOME ?? "", ".cache", "ms-playwright"), // Linux
     join(process.env.LOCALAPPDATA ?? "", "ms-playwright"), // Windows
     join(__dir, "node_modules", "playwright", ".local-browsers"),
   ];
