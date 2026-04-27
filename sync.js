@@ -9,7 +9,7 @@
  */
 
 import { chromium } from "playwright";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { parseArgs } from "util";
 
 const { values: args } = parseArgs({
@@ -21,7 +21,26 @@ const { values: args } = parseArgs({
   },
 });
 
-const OUTPUT_FILE = args.out;
+let OUTPUT_FILE = args.out;
+if (OUTPUT_FILE === "events.ics") {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  // +1 because getMonth() is 0-indexed
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yy = String(now.getFullYear()).slice(-2);
+
+  // We use " - " instead of " | " since the pipe character
+  // is invalid/forbidden in Windows filenames
+  const baseName = `Events - ${dd}-${mm}-${yy}`;
+
+  OUTPUT_FILE = `${baseName}.ics`;
+  let counter = 1;
+  while (existsSync(OUTPUT_FILE)) {
+    OUTPUT_FILE = `${baseName} (${counter}).ics`;
+    counter++;
+  }
+}
+
 const OWA_URL = args.url;
 
 // ANU MD 29' folder id discovered from diagnose_folders.json in this account.
@@ -545,13 +564,13 @@ async function main() {
           // get up to 3 unique event titles
           const subjects = [...new Set(folderMap[fid])].slice(0, 3).join(", ");
           console.log(
-            `    [${idx + 1}] ${folderMap[fid].length} events — e.g. ${subjects}`,
+            `    [${idx + 1}] ${folderMap[fid].length} events — e.g. ${subjects}\n`,
           );
         });
 
         while (!targetFolderId) {
           process.stdout.write(
-            `\nType a number [1-${folderIds.length}] to select which calendar you would like to save and press Enter: `,
+            `\nType a number [1-${folderIds.length}] to select which calendar you would like to save and press [Enter]: `,
           );
           process.stdin.resume();
           const answer = await new Promise((resolve) => {
@@ -631,7 +650,7 @@ async function main() {
 }
 
 function waitAndExit(code = 0) {
-  console.log("\nPress Enter to exit...");
+  console.log("\nPress [Enter] to exit...");
   process.stdin.resume();
   process.stdin.once("data", () => process.exit(code));
 }

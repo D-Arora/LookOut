@@ -13,6 +13,19 @@ var { values: args } = (0, import_util.parseArgs)({
   }
 });
 var OUTPUT_FILE = args.out;
+if (OUTPUT_FILE === "events.ics") {
+  const now = /* @__PURE__ */ new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yy = String(now.getFullYear()).slice(-2);
+  const baseName = `Events - ${dd}-${mm}-${yy}`;
+  OUTPUT_FILE = `${baseName}.ics`;
+  let counter = 1;
+  while ((0, import_fs.existsSync)(OUTPUT_FILE)) {
+    OUTPUT_FILE = `${baseName} (${counter}).ics`;
+    counter++;
+  }
+}
 var OWA_URL = args.url;
 function getEventCategories(ev) {
   const raw = ev.Categories ?? ev.categories ?? [];
@@ -414,7 +427,7 @@ async function main() {
         while (!targetFolderId) {
           process.stdout.write(
             `
-Type a number [1-${folderIds.length}] and press Enter: `
+Type a number [1-${folderIds.length}] to select which calendar you would like to save and press Enter: `
           );
           process.stdin.resume();
           const answer = await new Promise((resolve) => {
