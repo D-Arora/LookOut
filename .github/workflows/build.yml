@@ -24,8 +24,8 @@ jobs:
             artifact: LookOut-win-x64.exe
           - os: macos-latest # ARM runner (M1)
             artifact: LookOut-macos-arm64
-          # - os: macos-13 # Intel runner
-          #  artifact: LookOut-macos-x64
+          # - os: macos-13 # Intel runner — disabled, runners unreliable
+          #   artifact: LookOut-macos-x64
           - os: ubuntu-latest
             artifact: LookOut-linux-x64
 
@@ -47,7 +47,26 @@ jobs:
       - name: Build binary
         run: node build.mjs
 
-      - name: Upload binary
+      # ── macOS: zip with ditto before uploading ─────────────────────────────
+      # Two reasons:
+      # 1. actions/upload-artifact uses a plain zip which strips execute
+      #    permissions — the .app won't open on Mac ("damaged and can't be opened").
+      # 2. The recipient may be on Windows and needs a standard .zip they can
+      #    extract with Explorer/7-Zip. We produce ONE ditto zip here and upload
+      #    that file directly so upload-artifact doesn't re-wrap it.
+      - name: Zip .app with ditto (macOS only)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/LookOut.app dist/LookOut-macos.zip
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/LookOut-macos.zip # single file — upload-artifact won't re-zip it
+
+      - name: Upload Windows / Linux artifact
+        if: runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
