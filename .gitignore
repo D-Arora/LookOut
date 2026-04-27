@@ -1,0 +1,6 @@
+node_modules/
+dist/
+bundle.cjs
+diagnose.json
+events.ics
+diagnose_folders.json

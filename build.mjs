@@ -23,7 +23,7 @@ import { join, resolve } from "path";
 import { fileURLToPath } from "url";
 
 const __dir = fileURLToPath(new URL(".", import.meta.url));
-const dist  = join(__dir, "dist");
+const dist = join(__dir, "dist");
 
 // ── Step 1: bundle sync.js (ESM) → bundle.cjs (CommonJS) via esbuild ─────────
 // pkg requires CommonJS. We mark playwright as external so it stays as a
@@ -31,14 +31,14 @@ const dist  = join(__dir, "dist");
 console.log("📦  Bundling sync.js → bundle.cjs …");
 execSync(
   "npx esbuild sync.js " +
-  "--bundle " +
-  "--platform=node " +
-  "--format=cjs " +
-  "--external:playwright " +
-  "--external:fs " +
-  "--external:util " +
-  "--outfile=bundle.cjs",
-  { stdio: "inherit" }
+    "--bundle " +
+    "--platform=node " +
+    "--format=cjs " +
+    "--external:playwright " +
+    "--external:fs " +
+    "--external:util " +
+    "--outfile=bundle.cjs",
+  { stdio: "inherit" },
 );
 
 // ── Step 2: run pkg on the bundle ─────────────────────────────────────────────
@@ -51,18 +51,21 @@ console.log("\n🔨  Compiling binary for current platform via pkg …");
 mkdirSync(dist, { recursive: true });
 
 const platform = process.platform;
-const arch     = process.arch;
+const arch = process.arch;
 
-const hostTarget = platform === "win32"  ? { target: "node20-win-x64",     out: "outlook-calendar-sync-win-x64.exe" }
-                 : platform === "darwin" ? (arch === "arm64"
-                     ? { target: "node20-macos-arm64", out: "outlook-calendar-sync-macos-arm64" }
-                     : { target: "node20-macos-x64",   out: "outlook-calendar-sync-macos-x64"   })
-                 :                        { target: "node20-linux-x64",   out: "outlook-calendar-sync-linux-x64"   };
+const hostTarget =
+  platform === "win32"
+    ? { target: "node20-win-x64", out: "LookOut.exe" }
+    : platform === "darwin"
+      ? arch === "arm64"
+        ? { target: "node20-macos-arm64", out: "LookOut" }
+        : { target: "node20-macos-x64", out: "LookOut" }
+      : { target: "node20-linux-x64", out: "LookOut" };
 
 console.log(`  → ${hostTarget.target}`);
 execSync(
   `npx @yao-pkg/pkg bundle.cjs --target ${hostTarget.target} --output dist/${hostTarget.out}`,
-  { stdio: "inherit" }
+  { stdio: "inherit" },
 );
 
 const targets = [hostTarget]; // used below when copying browser and writing launchers
@@ -80,11 +83,14 @@ try {
   // Default cache locations
   const candidates = [
     join(process.env.HOME ?? "", ".cache", "ms-playwright"),
-    join(process.env.LOCALAPPDATA ?? "", "ms-playwright"),  // Windows
+    join(process.env.LOCALAPPDATA ?? "", "ms-playwright"), // Windows
     join(__dir, "node_modules", "playwright", ".local-browsers"),
   ];
   for (const c of candidates) {
-    if (existsSync(c) && readdirSync(c).length > 0) { pwCache = c; break; }
+    if (existsSync(c) && readdirSync(c).length > 0) {
+      pwCache = c;
+      break;
+    }
   }
 } catch (_) {}
 
@@ -94,10 +100,51 @@ if (!pwCache) {
   console.log("     Then re-run this build script.\n");
 } else {
   console.log(`  Found browser cache at: ${pwCache}`);
-  const pwDest = join(dist, "pw-browsers");
-  console.log(`  Copying to: ${pwDest} …`);
-  cpSync(pwCache, pwDest, { recursive: true });
-  console.log("  ✅  Browser copied.");
+
+  if (platform === "darwin") {
+    // For macOS, we bundle into an app wrapper
+    const appDir = join(dist, "LookOut.app");
+    const macOsDir = join(appDir, "Contents", "MacOS");
+    mkdirSync(macOsDir, { recursive: true });
+
+    // Copy binary into .app
+    cpSync(join(dist, "LookOut"), join(macOsDir, "LookOut-bin"));
+
+    // Default Info.plist
+    writeFileSync(
+      join(appDir, "Contents", "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>LookOut</string><key>CFBundleIdentifier</key><string>com.example.lookout</string><key>CFBundleName</key><string>LookOut</string><key>CFBundleVersion</key><string>1.0</string><key>CFBundlePackageType</key><string>APPL</string><key>LSUIElement</key><true/></dict></plist>`,
+      "utf8",
+    );
+
+    const pwDest = join(macOsDir, "pw-browsers");
+    console.log(`  Copying browser to: ${pwDest} …`);
+    cpSync(pwCache, pwDest, { recursive: true });
+    console.log("  ✅  Browser copied into app.");
+
+    // Create the macOS Launcher script that opens a terminal window so the CLI stays visible
+    const macLauncher = [
+      "#!/bin/bash",
+      'DIR="$(cd "$(dirname "$0")" && pwd)"',
+      'export PLAYWRIGHT_BROWSERS_PATH="$DIR/pw-browsers"',
+      'if [ "$1" != "--launched-in-terminal" ]; then',
+      '  osascript -e "tell application \\"Terminal\\"" \\',
+      '            -e "  do script \\"cd \\\\\\"$HOME/Desktop\\\\\\"; \\\\\\"$DIR/LookOut-bin\\\\\\" \\\\\\"--launched-in-terminal\\\\\\"\\"" \\',
+      '            -e "  activate" \\',
+      '            -e "end tell"',
+      "  exit 0",
+      "fi",
+      'cd "$HOME/Desktop"', // fallbacks to running in current context if they somehow hit the flag
+      '"$DIR/LookOut-bin" "$@"',
+    ].join("\n");
+    writeFileSync(join(macOsDir, "LookOut"), macLauncher, { mode: 0o755 });
+    console.log("  Wrote macOS App bundle launcher");
+  } else {
+    const pwDest = join(dist, "pw-browsers");
+    console.log(`  Copying to: ${pwDest} …`);
+    cpSync(pwCache, pwDest, { recursive: true });
+    console.log("  ✅  Browser copied.");
+  }
 }
 
 // ── Step 4: generate launcher scripts ─────────────────────────────────────────
@@ -108,9 +155,11 @@ import { writeFileSync } from "fs";
 
 // Write launcher for the platform we just built
 if (platform === "win32") {
-  const winLauncher = `@echo off\nset DIR=%~dp0\nset PLAYWRIGHT_BROWSERS_PATH=%DIR%pw-browsers\n%DIR%outlook-calendar-sync-win-x64.exe %*\n`;
+  const winLauncher = `@echo off\nset DIR=%~dp0\nset PLAYWRIGHT_BROWSERS_PATH=%DIR%pw-browsers\n"%DIR%LookOut.exe" %*\n`;
   writeFileSync(join(dist, "run.bat"), winLauncher);
   console.log("  Wrote run.bat");
+} else if (platform === "darwin") {
+  console.log("  Skipping run.sh for macOS — use LookOut.app instead.");
 } else {
   const macLinuxLauncher = [
     "#!/bin/bash",
@@ -134,8 +183,9 @@ console.log(`
   To distribute:
     Zip the entire dist/ folder and share it.
     Recipients run:
-      Mac/Linux:  ./run.sh
-      Windows:    run.bat   (or double-click)
+      Mac:        LookOut.app
+      Linux:      ./run.sh
+      Windows:    run.bat   (or double-click LookOut.exe)
     No Node, npm, or Playwright setup needed.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);

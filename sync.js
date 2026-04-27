@@ -594,7 +594,8 @@ async function main() {
     if (!all.length) {
       console.error("No events captured — browse the calendar first.");
       await browser.close();
-      process.exit(1);
+      waitAndExit(1);
+      return;
     }
 
     // Dump full raw sample for field inspection
@@ -622,7 +623,8 @@ async function main() {
       `\n    ${all.length} events across ${Object.keys(folderMap).length} folder(s)`,
     );
     await browser.close();
-    process.exit(0);
+    waitAndExit(0);
+    return;
   }
 
   // ── Fetch full descriptions before closing the browser ──────────────────
@@ -655,7 +657,8 @@ async function main() {
     console.error(
       "\n⚠️   No events were converted. Try browsing in Month view.\n",
     );
-    process.exit(1);
+    waitAndExit(1);
+    return;
   }
 
   const tzUsed = [...new Set(results.map((r) => r.ianaId))];
@@ -679,9 +682,16 @@ async function main() {
   console.log("    2. Settings (⚙) → Import & Export → Import");
   console.log(`    3. Choose ${OUTPUT_FILE} and select target calendar`);
   console.log("    4. Click Import\n");
+  waitAndExit(0);
+}
+
+function waitAndExit(code = 0) {
+  console.log("\nPress Enter to exit...");
+  process.stdin.resume();
+  process.stdin.once("data", () => process.exit(code));
 }
 
 main().catch((err) => {
   console.error("Fatal error:", err);
-  process.exit(1);
+  waitAndExit(1);
 });

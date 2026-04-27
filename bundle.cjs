@@ -6,7 +6,6 @@ var import_fs = require("fs");
 var import_util = require("util");
 var { values: args } = (0, import_util.parseArgs)({
   options: {
-    days: { type: "string", default: "30" },
     out: { type: "string", default: "events.ics" },
     url: { type: "string", default: "https://outlook.office.com/calendar" },
     "folder-id": { type: "string" },
@@ -14,7 +13,6 @@ var { values: args } = (0, import_util.parseArgs)({
     diagnose: { type: "boolean", default: false }
   }
 });
-var LOOK_AHEAD_DAYS = parseInt(args.days, 10);
 var OUTPUT_FILE = args.out;
 var OWA_URL = args.url;
 function loadCategoryColorMap(rawPath) {
@@ -397,10 +395,8 @@ async function fetchFullBodies(page, owaBaseUrl, events) {
 }
 async function main() {
   console.log("\u{1F680}  Launching browser \u2014 please sign in when prompted.");
-  console.log(
-    `    Looking ahead ${LOOK_AHEAD_DAYS} days. Output \u2192 ${OUTPUT_FILE}
-`
-  );
+  console.log(`    Output \u2192 ${OUTPUT_FILE}
+`);
   const browser = await import_playwright.chromium.launch({ headless: false, channel: "chrome" });
   const context = await browser.newContext();
   const page = await context.newPage();

@@ -1,7 +1,7 @@
 {
-  "name": "outlook-calendar-sync",
+  "name": "lookout",
   "version": "1.0.0",
-  "description": "Sync a shared Outlook calendar to .ics for Google Calendar import",
+  "description": "LookOut: Sync a shared Outlook calendar to .ics for Google Calendar import",
   "type": "module",
   "scripts": {
     "sync": "node sync.js",
