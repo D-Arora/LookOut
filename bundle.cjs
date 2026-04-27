@@ -9,74 +9,13 @@ var { values: args } = (0, import_util.parseArgs)({
     out: { type: "string", default: "events.ics" },
     url: { type: "string", default: "https://outlook.office.com/calendar" },
     "folder-id": { type: "string" },
-    "category-colors": { type: "string" },
     diagnose: { type: "boolean", default: false }
   }
 });
 var OUTPUT_FILE = args.out;
 var OWA_URL = args.url;
-function loadCategoryColorMap(rawPath) {
-  if (!rawPath) return {};
-  try {
-    const parsed = JSON.parse((0, import_fs.readFileSync)(rawPath, "utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      console.warn(
-        `  \u26A0\uFE0F  Ignoring --category-colors (${rawPath}) \u2014 expected a JSON object map`
-      );
-      return {};
-    }
-    return parsed;
-  } catch (err) {
-    console.warn(
-      `  \u26A0\uFE0F  Could not read --category-colors (${rawPath}): ${err.message}`
-    );
-    return {};
-  }
-}
-var CATEGORY_COLOR_MAP = loadCategoryColorMap(args["category-colors"]);
 var DEFAULT_TARGET_FOLDER_ID = "AAMkAGQ4NzU2N2ViLTZjYzItNDE3Ny1iYmY5LThhNGQ0MjNiZmJmOAAuAAAAAABed/RRxjc2S7Ut05pVilfMAQBdE9hKBrsjQJ4KFVRlv6ShAAAgqCo4AAA=";
 var TARGET_FOLDER_ID = args["folder-id"] || DEFAULT_TARGET_FOLDER_ID;
-var OUTLOOK_CHARM_TO_HEX = {
-  Blue: "#0078D4",
-  LightBlue: "#4AA0FF",
-  Teal: "#00B7C3",
-  Green: "#107C10",
-  LightGreen: "#7FBA00",
-  Yellow: "#FFB900",
-  Orange: "#D83B01",
-  Red: "#D13438",
-  Pink: "#E3008C",
-  Purple: "#8764B8",
-  Gray: "#69797E",
-  DarkBlue: "#004E8C",
-  // Icon-style charms we have observed in this calendar
-  Heart: "#D13438",
-  FirstAid: "#C50F1F",
-  Books: "#8764B8",
-  Cake: "#CA5010"
-};
-var CHARM_FALLBACK_HEX = [
-  "#0078D4",
-  "#00B7C3",
-  "#107C10",
-  "#7FBA00",
-  "#FFB900",
-  "#D83B01",
-  "#D13438",
-  "#E3008C",
-  "#8764B8",
-  "#004E8C",
-  "#69797E"
-];
-function charmToColorHex(charm) {
-  if (!charm || charm === "None") return null;
-  if (OUTLOOK_CHARM_TO_HEX[charm]) return OUTLOOK_CHARM_TO_HEX[charm];
-  let hash = 0;
-  for (let i = 0; i < charm.length; i++) {
-    hash = hash * 31 + charm.charCodeAt(i) >>> 0;
-  }
-  return CHARM_FALLBACK_HEX[hash % CHARM_FALLBACK_HEX.length];
-}
 function getEventCategories(ev) {
   const raw = ev.Categories ?? ev.categories ?? [];
   if (!Array.isArray(raw)) return [];
@@ -87,20 +26,6 @@ function getEventCategories(ev) {
     }
     return "";
   }).filter(Boolean);
-}
-function categoryToColorHex(categories) {
-  if (!categories.length) return null;
-  for (const cat of categories) {
-    const mapped = CATEGORY_COLOR_MAP[cat];
-    if (typeof mapped === "string" && /^#[0-9A-Fa-f]{6}$/.test(mapped)) {
-      return mapped.toUpperCase();
-    }
-  }
-  let hash = 0;
-  for (const ch of categories[0]) {
-    hash = hash * 31 + ch.charCodeAt(0) >>> 0;
-  }
-  return CHARM_FALLBACK_HEX[hash % CHARM_FALLBACK_HEX.length];
 }
 var WINDOWS_TO_IANA = {
   "AUS Eastern Standard Time": "Australia/Sydney",
@@ -227,7 +152,6 @@ function eventToVEvent(ev) {
   const winTzId = ev.StartTimeZoneId || ev.Start?.TimeZone || ev.start?.timeZone || null;
   const ianaId = toIana(winTzId);
   const location = ev.Location?.DisplayName || ev.location?.displayName || "";
-  const charm = (ev.Charm || ev.charm || "").trim();
   const categories = getEventCategories(ev);
   const rawBody = ev.TextBody || ev.Body?.Value || ev.body?.content || ev.Preview || "";
   const plainBody = bodyToPlainText(rawBody);
@@ -268,11 +192,6 @@ function eventToVEvent(ev) {
   if (categories.length) {
     lines.push(fold(`CATEGORIES:${esc(categories.join(","))}`));
   }
-  const colorHex = categoryToColorHex(categories) || (charm && charm !== "None" ? charmToColorHex(charm) : null);
-  if (charm && charm !== "None") {
-    lines.push(fold(`X-OUTLOOK-CHARM:${esc(charm)}`));
-  }
-  if (colorHex) lines.push(fold(`COLOR:${colorHex}`));
   lines.push(`DTSTAMP:${toIcalUtc((/* @__PURE__ */ new Date()).toISOString())}`);
   lines.push("END:VEVENT");
   return { vevent: lines.join("\r\n"), ianaId };
@@ -447,7 +366,8 @@ async function main() {
     if (!all.length) {
       console.error("No events captured \u2014 browse the calendar first.");
       await browser.close();
-      process.exit(1);
+      waitAndExit(1);
+      return;
     }
     (0, import_fs.writeFileSync)("diagnose.json", JSON.stringify(all[0], null, 2), "utf8");
     const folderMap = {};
@@ -461,16 +381,15 @@ async function main() {
       JSON.stringify(folderMap, null, 2),
       "utf8"
     );
-    const charms = [...new Set(all.map((ev) => ev.Charm).filter(Boolean))];
     console.log("\n\u{1F50D}  Raw event \u2192 diagnose.json");
     console.log("\u{1F4C1}  Folder map \u2192 diagnose_folders.json");
-    console.log("\u{1F3A8}  Charm values seen:", charms.join(", ") || "(none)");
     console.log(
       `
     ${all.length} events across ${Object.keys(folderMap).length} folder(s)`
     );
     await browser.close();
-    process.exit(0);
+    waitAndExit(0);
+    return;
   }
   const eventsArray = [...collectedEvents.values()];
   if (eventsArray.length > 0) {
@@ -498,7 +417,8 @@ async function main() {
     console.error(
       "\n\u26A0\uFE0F   No events were converted. Try browsing in Month view.\n"
     );
-    process.exit(1);
+    waitAndExit(1);
+    return;
   }
   const tzUsed = [...new Set(results.map((r) => r.ianaId))];
   console.log(`    Timezones detected: ${tzUsed.join(", ")}`);
@@ -506,10 +426,6 @@ async function main() {
     (r) => r.vevent.includes("DESCRIPTION:")
   ).length;
   console.log(`    Events with descriptions: ${descCount}/${results.length}`);
-  const colorCount = results.filter((r) => r.vevent.includes("COLOR:")).length;
-  console.log(
-    `    Events with colour metadata: ${colorCount}/${results.length}`
-  );
   (0, import_fs.writeFileSync)(OUTPUT_FILE, buildIcs(results), "utf8");
   console.log(`
 \u2705  Saved ${results.length} event(s) to ${OUTPUT_FILE}`);
@@ -518,8 +434,14 @@ async function main() {
   console.log("    2. Settings (\u2699) \u2192 Import & Export \u2192 Import");
   console.log(`    3. Choose ${OUTPUT_FILE} and select target calendar`);
   console.log("    4. Click Import\n");
+  waitAndExit(0);
+}
+function waitAndExit(code = 0) {
+  console.log("\nPress Enter to exit...");
+  process.stdin.resume();
+  process.stdin.once("data", () => process.exit(code));
 }
 main().catch((err) => {
   console.error("Fatal error:", err);
-  process.exit(1);
+  waitAndExit(1);
 });

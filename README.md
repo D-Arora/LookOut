@@ -14,7 +14,6 @@ Chromium — nothing else to install.
 
 ```
 LookOut.exe
-LookOut.exe --days 60
 ```
 
 **Linux:**
@@ -22,7 +21,6 @@ LookOut.exe --days 60
 ```bash
 chmod +x run.sh     # first time only
 ./run.sh
-./run.sh --days 60
 ```
 
 A Chrome window opens. Log in, browse the calendar months you want,
@@ -62,27 +60,11 @@ Or trigger it manually from the Actions tab without a tag.
 
 ## CLI options
 
-| Flag                     | Default     | Description                                   |
-| ------------------------ | ----------- | --------------------------------------------- |
-| `--days N`               | 30          | How many days ahead to capture                |
-| `--out FILE`             | events.ics  | Output filename                               |
-| `--folder-id ID`         | (hardcoded) | Override the calendar folder filter           |
-| `--category-colors FILE` | —           | JSON map of category name → hex colour        |
-| `--diagnose`             | false       | Dump raw event data and folder map, then exit |
-
-**Custom category colours** (`colours.json`):
-
-```json
-{
-  "Lecture": "#0078D4",
-  "Practical": "#107C10",
-  "Tutorial": "#D83B01"
-}
-```
-
-```bash
-LookOut.exe --category-colors colours.json
-```
+| Flag             | Default     | Description                                   |
+| ---------------- | ----------- | --------------------------------------------- |
+| `--out FILE`     | events.ics  | Output filename                               |
+| `--folder-id ID` | (hardcoded) | Override the calendar folder filter           |
+| `--diagnose`     | false       | Dump raw event data and folder map, then exit |
 
 ---
 
