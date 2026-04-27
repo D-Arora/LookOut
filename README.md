@@ -64,6 +64,8 @@ Or trigger it manually from the Actions tab without a tag.
 | ---------------- | ----------- | --------------------------------------------- |
 | `--out FILE`     | events.ics  | Output filename                               |
 | `--folder-id ID` | (hardcoded) | Override the calendar folder filter           |
+| `--a`            | false       | Include Group A events and exclude Group B    |
+| `--b`            | false       | Include Group B events and exclude Group A    |
 | `--diagnose`     | false       | Dump raw event data and folder map, then exit |
 
 ---

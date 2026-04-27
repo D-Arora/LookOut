@@ -9,7 +9,9 @@ var { values: args } = (0, import_util.parseArgs)({
     out: { type: "string", default: "events.ics" },
     url: { type: "string", default: "https://outlook.office.com/calendar" },
     "folder-id": { type: "string" },
-    diagnose: { type: "boolean", default: false }
+    diagnose: { type: "boolean", default: false },
+    a: { type: "boolean", default: false },
+    b: { type: "boolean", default: false }
   }
 });
 var OUTPUT_FILE = args.out;
@@ -421,13 +423,14 @@ async function main() {
         folderIds.forEach((fid, idx) => {
           const subjects = [...new Set(folderMap[fid])].slice(0, 3).join(", ");
           console.log(
-            `    [${idx + 1}] ${folderMap[fid].length} events \u2014 e.g. ${subjects}`
+            `    [${idx + 1}] ${folderMap[fid].length} events \u2014 e.g. ${subjects}
+`
           );
         });
         while (!targetFolderId) {
           process.stdout.write(
             `
-Type a number [1-${folderIds.length}] to select which calendar you would like to save and press Enter: `
+Type a number [1-${folderIds.length}] to select which calendar you would like to save and press [Enter]: `
           );
           process.stdin.resume();
           const answer = await new Promise((resolve) => {
@@ -441,11 +444,50 @@ Type a number [1-${folderIds.length}] to select which calendar you would like to
         }
       }
     }
+    let keepGroupA = args.a;
+    let keepGroupB = args.b;
+    if (!keepGroupA && !keepGroupB) {
+      console.log(`
+\u{1F465}  Which group do you belong to?`);
+      console.log(`    [A] Group A`);
+      console.log(`    [B] Group B`);
+      console.log(`    [N] Neither / Keep all events`);
+      let groupAns = "";
+      while (!groupAns) {
+        process.stdout.write(`
+Type A, B, or N and press [Enter]: `);
+        process.stdin.resume();
+        const answer = await new Promise((resolve) => {
+          process.stdin.once(
+            "data",
+            (d) => resolve(d.toString().trim().toUpperCase())
+          );
+        });
+        process.stdin.pause();
+        if (["A", "B", "N"].includes(answer)) {
+          groupAns = answer;
+        }
+      }
+      if (groupAns === "A") keepGroupA = true;
+      if (groupAns === "B") keepGroupB = true;
+    }
+    let skippedByGroup2 = 0;
     for (const [key, ev] of collectedEvents.entries()) {
       const fid = ev.ParentFolderId?.Id ?? "unknown";
       if (fid !== targetFolderId) {
         collectedEvents.delete(key);
         skippedByFolder++;
+        continue;
+      }
+      const title = (ev.Subject || ev.subject || "(no title)").toLowerCase();
+      const hasA = title.includes("group a");
+      const hasB = title.includes("group b");
+      if (keepGroupA && !keepGroupB && hasB && !hasA) {
+        collectedEvents.delete(key);
+        skippedByGroup2++;
+      } else if (keepGroupB && !keepGroupA && hasA && !hasB) {
+        collectedEvents.delete(key);
+        skippedByGroup2++;
       }
     }
   }
@@ -466,6 +508,8 @@ Type a number [1-${folderIds.length}] to select which calendar you would like to
   if (targetFolderId) console.log(`    Folder filter: ${targetFolderId}`);
   if (skippedByFolder > 0)
     console.log(`    Skipped (other calendars): ${skippedByFolder}`);
+  if (typeof skippedByGroup !== "undefined" && skippedByGroup > 0)
+    console.log(`    Skipped (other group): ${skippedByGroup}`);
   const results = [];
   for (const ev of collectedEvents.values()) {
     const r = eventToVEvent(ev);
@@ -495,7 +539,7 @@ Type a number [1-${folderIds.length}] to select which calendar you would like to
   waitAndExit(0);
 }
 function waitAndExit(code = 0) {
-  console.log("\nPress Enter to exit...");
+  console.log("\nPress [Enter] to exit...");
   process.stdin.resume();
   process.stdin.once("data", () => process.exit(code));
 }

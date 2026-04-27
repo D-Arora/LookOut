@@ -18,6 +18,8 @@ const { values: args } = parseArgs({
     url: { type: "string", default: "https://outlook.office.com/calendar" },
     "folder-id": { type: "string" },
     diagnose: { type: "boolean", default: false },
+    a: { type: "boolean", default: false },
+    b: { type: "boolean", default: false },
   },
 });
 
@@ -586,12 +588,56 @@ async function main() {
       }
     }
 
+    let keepGroupA = args.a;
+    let keepGroupB = args.b;
+
+    if (!keepGroupA && !keepGroupB) {
+      console.log(`\n👥  Which group do you belong to?`);
+      console.log(`    [A] Group A`);
+      console.log(`    [B] Group B`);
+      console.log(`    [N] Neither / Keep all events`);
+
+      let groupAns = "";
+      while (!groupAns) {
+        process.stdout.write(`\nType A, B, or N and press [Enter]: `);
+        process.stdin.resume();
+        const answer = await new Promise((resolve) => {
+          process.stdin.once("data", (d) =>
+            resolve(d.toString().trim().toUpperCase()),
+          );
+        });
+        process.stdin.pause();
+
+        if (["A", "B", "N"].includes(answer)) {
+          groupAns = answer;
+        }
+      }
+
+      if (groupAns === "A") keepGroupA = true;
+      if (groupAns === "B") keepGroupB = true;
+    }
+
     // Filter down collected events
+    let skippedByGroup = 0;
     for (const [key, ev] of collectedEvents.entries()) {
       const fid = ev.ParentFolderId?.Id ?? "unknown";
       if (fid !== targetFolderId) {
         collectedEvents.delete(key);
         skippedByFolder++;
+        continue;
+      }
+
+      const title = (ev.Subject || ev.subject || "(no title)").toLowerCase();
+      const hasA = title.includes("group a");
+      const hasB = title.includes("group b");
+
+      // Apply Group A / Group B filters
+      if (keepGroupA && !keepGroupB && hasB && !hasA) {
+        collectedEvents.delete(key);
+        skippedByGroup++;
+      } else if (keepGroupB && !keepGroupA && hasA && !hasB) {
+        collectedEvents.delete(key);
+        skippedByGroup++;
       }
     }
   }
@@ -615,6 +661,8 @@ async function main() {
   if (targetFolderId) console.log(`    Folder filter: ${targetFolderId}`);
   if (skippedByFolder > 0)
     console.log(`    Skipped (other calendars): ${skippedByFolder}`);
+  if (typeof skippedByGroup !== "undefined" && skippedByGroup > 0)
+    console.log(`    Skipped (other group): ${skippedByGroup}`);
 
   const results = [];
   for (const ev of collectedEvents.values()) {
