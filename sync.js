@@ -305,7 +305,7 @@ function buildIcs(results) {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//outlook-calendar-sync//EN",
+    "PRODID:-//LookOut//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     ...tzIds.map(makeVTimezone),

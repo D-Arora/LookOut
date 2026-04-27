@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/LookOut.png" alt="LookOut Logo" width="128">
+</p>
+
 # LookOut
 
 ---

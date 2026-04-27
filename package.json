@@ -8,7 +8,9 @@
     "build": "node build.mjs"
   },
   "dependencies": {
-    "playwright": "^1.44.0"
+    "playwright": "^1.44.0",
+    "png2icons": "^2.0.1",
+    "resedit": "^3.0.2"
   },
   "devDependencies": {
     "@yao-pkg/pkg": "^6.0.0",

@@ -7,10 +7,10 @@
  *
  * Output:
  *   dist/
- *     outlook-calendar-sync-macos-arm64   ← Apple Silicon Mac
- *     outlook-calendar-sync-macos-x64     ← Intel Mac
- *     outlook-calendar-sync-win-x64.exe   ← Windows
- *     outlook-calendar-sync-linux-x64     ← Linux
+ *     LookOut-macos-arm64   ← Apple Silicon Mac
+ *     LookOut-macos-x64     ← Intel Mac
+ *     LookOut-win-x64.exe   ← Windows
+ *     LookOut-linux-x64     ← Linux
  *     pw-browsers/                        ← Playwright browser (ship alongside binary)
  *
  * The binary + pw-browsers/ folder must stay together.
@@ -18,9 +18,18 @@
  */
 
 import { execSync } from "child_process";
-import { existsSync, mkdirSync, cpSync, readdirSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  cpSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "fs";
 import { join, resolve } from "path";
 import { fileURLToPath } from "url";
+import * as resedit from "resedit";
+import * as p2i from "png2icons";
 
 const __dir = fileURLToPath(new URL(".", import.meta.url));
 const dist = join(__dir, "dist");
@@ -68,6 +77,34 @@ execSync(
   { stdio: "inherit" },
 );
 
+// Optional: Inject icon if assets/LookOut.png exists
+const iconPngPath = join(__dir, "assets", "LookOut.png");
+if (existsSync(iconPngPath)) {
+  console.log("🎨  Injecting LookOut.png icon...");
+  const pngData = readFileSync(iconPngPath);
+
+  if (platform === "win32") {
+    const icoData = p2i.createICO(pngData, p2i.BICUBIC2, 0, false);
+    if (icoData) {
+      const exeData = readFileSync(join(dist, hostTarget.out));
+      const exe = resedit.NtExecutable.from(exeData);
+      const res = resedit.NtExecutableResource.from(exe);
+      const iconFile = resedit.Data.IconFile.from(icoData);
+      resedit.Resource.IconGroupEntry.replaceIconsForResource(
+        res.entries,
+        1,
+        1033,
+        iconFile.icons.map((item) => item.data),
+      );
+      res.outputResource(exe);
+      writeFileSync(join(dist, hostTarget.out), Buffer.from(exe.generate()));
+      console.log(
+        "  ✅  Windows .ico injected (Note: Windows caches icons! If you don't see it, rename or move the file to refresh).",
+      );
+    }
+  }
+}
+
 const targets = [hostTarget]; // used below when copying browser and writing launchers
 
 // ── Step 3: copy Playwright browser alongside each binary ─────────────────────
@@ -105,15 +142,29 @@ if (!pwCache) {
     // For macOS, we bundle into an app wrapper
     const appDir = join(dist, "LookOut.app");
     const macOsDir = join(appDir, "Contents", "MacOS");
+    const resourcesDir = join(appDir, "Contents", "Resources");
     mkdirSync(macOsDir, { recursive: true });
+    mkdirSync(resourcesDir, { recursive: true });
 
     // Copy binary into .app
     cpSync(join(dist, "LookOut"), join(macOsDir, "LookOut-bin"));
 
+    // Inject macOS App Icon if we have LookOut.png
+    let iconKey = "";
+    if (existsSync(iconPngPath)) {
+      const pngData = readFileSync(iconPngPath);
+      const icnsData = p2i.createICNS(pngData, p2i.BICUBIC2, 0);
+      if (icnsData) {
+        writeFileSync(join(resourcesDir, "AppIcon.icns"), icnsData);
+        iconKey = "<key>CFBundleIconFile</key><string>AppIcon.icns</string>";
+        console.log("  ✅  macOS .icns injected.");
+      }
+    }
+
     // Default Info.plist
     writeFileSync(
       join(appDir, "Contents", "Info.plist"),
-      `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>LookOut</string><key>CFBundleIdentifier</key><string>com.example.lookout</string><key>CFBundleName</key><string>LookOut</string><key>CFBundleVersion</key><string>1.0</string><key>CFBundlePackageType</key><string>APPL</string><key>LSUIElement</key><true/></dict></plist>`,
+      `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>LookOut</string><key>CFBundleIdentifier</key><string>com.example.lookout</string><key>CFBundleName</key><string>LookOut</string>${iconKey}<key>CFBundleVersion</key><string>1.0</string><key>CFBundlePackageType</key><string>APPL</string><key>LSUIElement</key><true/></dict></plist>`,
       "utf8",
     );
 
@@ -150,8 +201,6 @@ if (!pwCache) {
 // ── Step 4: generate launcher scripts ─────────────────────────────────────────
 // The binary needs PLAYWRIGHT_BROWSERS_PATH pointed at pw-browsers/.
 // A tiny shell/bat wrapper handles this so the user can just double-click.
-
-import { writeFileSync } from "fs";
 
 // Write launcher for the platform we just built
 if (platform === "win32") {
