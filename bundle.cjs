@@ -14,8 +14,6 @@ var { values: args } = (0, import_util.parseArgs)({
 });
 var OUTPUT_FILE = args.out;
 var OWA_URL = args.url;
-var DEFAULT_TARGET_FOLDER_ID = "AAMkAGQ4NzU2N2ViLTZjYzItNDE3Ny1iYmY5LThhNGQ0MjNiZmJmOAAuAAAAAABed/RRxjc2S7Ut05pVilfMAQBdE9hKBrsjQJ4KFVRlv6ShAAAgqCo4AAA=";
-var TARGET_FOLDER_ID = args["folder-id"] || DEFAULT_TARGET_FOLDER_ID;
 function getEventCategories(ev) {
   const raw = ev.Categories ?? ev.categories ?? [];
   if (!Array.isArray(raw)) return [];
@@ -336,13 +334,6 @@ async function main() {
           `  \u2705  Captured ${events.length} event(s) from ?action=${action}`
         );
         for (const ev of events) {
-          if (!args.diagnose) {
-            const folderId = ev.ParentFolderId?.Id || "";
-            if (!folderId || folderId !== TARGET_FOLDER_ID) {
-              skippedByFolder++;
-              continue;
-            }
-          }
           const key = ev.UID || ev.iCalUId || ev.id || ev.ItemId?.Id || JSON.stringify(ev).slice(0, 80);
           collectedEvents.set(key, ev);
         }
@@ -391,6 +382,60 @@ async function main() {
     waitAndExit(0);
     return;
   }
+  const allEvents = [...collectedEvents.values()];
+  let targetFolderId = args["folder-id"];
+  if (allEvents.length > 0) {
+    const folderMap = {};
+    for (const ev of allEvents) {
+      const fid = ev.ParentFolderId?.Id ?? "unknown";
+      if (!folderMap[fid]) folderMap[fid] = [];
+      folderMap[fid].push(ev.Subject ?? ev.subject ?? "(no title)");
+    }
+    const folderIds = Object.keys(folderMap);
+    if (targetFolderId && !folderIds.includes(targetFolderId)) {
+      console.log(
+        `
+\u26A0\uFE0F   Specified --folder-id not found in captured events. Select one instead:`
+      );
+      targetFolderId = null;
+    }
+    if (!targetFolderId) {
+      if (folderIds.length === 1) {
+        targetFolderId = folderIds[0];
+      } else {
+        console.log(`
+\u{1F4C2}  Detected events from multiple calendars:`);
+        folderIds.forEach((fid, idx) => {
+          const subjects = [...new Set(folderMap[fid])].slice(0, 3).join(", ");
+          console.log(
+            `    [${idx + 1}] ${folderMap[fid].length} events \u2014 e.g. ${subjects}`
+          );
+        });
+        while (!targetFolderId) {
+          process.stdout.write(
+            `
+Type a number [1-${folderIds.length}] and press Enter: `
+          );
+          process.stdin.resume();
+          const answer = await new Promise((resolve) => {
+            process.stdin.once("data", (d) => resolve(d.toString().trim()));
+          });
+          process.stdin.pause();
+          const n = parseInt(answer, 10);
+          if (!isNaN(n) && n >= 1 && n <= folderIds.length) {
+            targetFolderId = folderIds[n - 1];
+          }
+        }
+      }
+    }
+    for (const [key, ev] of collectedEvents.entries()) {
+      const fid = ev.ParentFolderId?.Id ?? "unknown";
+      if (fid !== targetFolderId) {
+        collectedEvents.delete(key);
+        skippedByFolder++;
+      }
+    }
+  }
   const eventsArray = [...collectedEvents.values()];
   if (eventsArray.length > 0) {
     console.log(
@@ -405,7 +450,7 @@ async function main() {
   await browser.close();
   console.log(`
 \u{1F4E6}  Processing ${collectedEvents.size} unique event(s)\u2026`);
-  console.log(`    Folder filter: ${TARGET_FOLDER_ID}`);
+  if (targetFolderId) console.log(`    Folder filter: ${targetFolderId}`);
   if (skippedByFolder > 0)
     console.log(`    Skipped (other calendars): ${skippedByFolder}`);
   const results = [];

@@ -26,9 +26,6 @@ const OWA_URL = args.url;
 
 // ANU MD 29' folder id discovered from diagnose_folders.json in this account.
 // Override at runtime with: --folder-id <ParentFolderId.Id>
-const DEFAULT_TARGET_FOLDER_ID =
-  "AAMkAGQ4NzU2N2ViLTZjYzItNDE3Ny1iYmY5LThhNGQ0MjNiZmJmOAAuAAAAAABed/RRxjc2S7Ut05pVilfMAQBdE9hKBrsjQJ4KFVRlv6ShAAAgqCo4AAA=";
-const TARGET_FOLDER_ID = args["folder-id"] || DEFAULT_TARGET_FOLDER_ID;
 
 function getEventCategories(ev) {
   const raw = ev.Categories ?? ev.categories ?? [];
@@ -458,14 +455,6 @@ async function main() {
           `  ✅  Captured ${events.length} event(s) from ?action=${action}`,
         );
         for (const ev of events) {
-          if (!args.diagnose) {
-            const folderId = ev.ParentFolderId?.Id || "";
-            if (!folderId || folderId !== TARGET_FOLDER_ID) {
-              skippedByFolder++;
-              continue;
-            }
-          }
-
           const key =
             ev.UID ||
             ev.iCalUId ||
@@ -527,6 +516,67 @@ async function main() {
     return;
   }
 
+  const allEvents = [...collectedEvents.values()];
+  let targetFolderId = args["folder-id"];
+
+  if (allEvents.length > 0) {
+    const folderMap = {};
+    for (const ev of allEvents) {
+      const fid = ev.ParentFolderId?.Id ?? "unknown";
+      if (!folderMap[fid]) folderMap[fid] = [];
+      folderMap[fid].push(ev.Subject ?? ev.subject ?? "(no title)");
+    }
+
+    const folderIds = Object.keys(folderMap);
+
+    if (targetFolderId && !folderIds.includes(targetFolderId)) {
+      console.log(
+        `\n⚠️   Specified --folder-id not found in captured events. Select one instead:`,
+      );
+      targetFolderId = null;
+    }
+
+    if (!targetFolderId) {
+      if (folderIds.length === 1) {
+        targetFolderId = folderIds[0];
+      } else {
+        console.log(`\n📂  Detected events from multiple calendars:`);
+        folderIds.forEach((fid, idx) => {
+          // get up to 3 unique event titles
+          const subjects = [...new Set(folderMap[fid])].slice(0, 3).join(", ");
+          console.log(
+            `    [${idx + 1}] ${folderMap[fid].length} events — e.g. ${subjects}`,
+          );
+        });
+
+        while (!targetFolderId) {
+          process.stdout.write(
+            `\nType a number [1-${folderIds.length}] to select which calendar you would like to save and press Enter: `,
+          );
+          process.stdin.resume();
+          const answer = await new Promise((resolve) => {
+            process.stdin.once("data", (d) => resolve(d.toString().trim()));
+          });
+          process.stdin.pause();
+
+          const n = parseInt(answer, 10);
+          if (!isNaN(n) && n >= 1 && n <= folderIds.length) {
+            targetFolderId = folderIds[n - 1];
+          }
+        }
+      }
+    }
+
+    // Filter down collected events
+    for (const [key, ev] of collectedEvents.entries()) {
+      const fid = ev.ParentFolderId?.Id ?? "unknown";
+      if (fid !== targetFolderId) {
+        collectedEvents.delete(key);
+        skippedByFolder++;
+      }
+    }
+  }
+
   // ── Fetch full descriptions before closing the browser ──────────────────
   const eventsArray = [...collectedEvents.values()];
   if (eventsArray.length > 0) {
@@ -543,7 +593,7 @@ async function main() {
 
   // ── Build .ics ────────────────────────────────────────────────────────────
   console.log(`\n📦  Processing ${collectedEvents.size} unique event(s)…`);
-  console.log(`    Folder filter: ${TARGET_FOLDER_ID}`);
+  if (targetFolderId) console.log(`    Folder filter: ${targetFolderId}`);
   if (skippedByFolder > 0)
     console.log(`    Skipped (other calendars): ${skippedByFolder}`);
 
